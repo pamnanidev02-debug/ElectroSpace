@@ -22,12 +22,18 @@ import {
   Refrigerator,
   MoreHorizontal,
   Snowflake,
-  Rocket
+  Rocket,
+  X,
+  Star,
+  Twitter,
+  Instagram,
+  Facebook
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeRoom, RoomAnalysis } from './services/gemini';
 
 type Screen = 'landing' | 'wizard' | 'recommendations';
+type ModalType = 'none' | 'how-it-works' | 'products' | 'pricing' | 'reviews' | 'gallery' | 'ai-expert';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('landing');
@@ -35,6 +41,8 @@ export default function App() {
   const [analysis, setAnalysis] = useState<RoomAnalysis | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
+  const [modalType, setModalType] = useState<ModalType>('none');
+  const [toast, setToast] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     category: 'Air Conditioner',
     roomSize: '250 - 350 sq ft',
@@ -50,6 +58,13 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const handleStartWizard = () => {
     if (!user) {
@@ -75,14 +90,23 @@ export default function App() {
     setScreen('landing');
   };
 
+  const showToast = (msg: string) => setToast(msg);
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar onNavigate={setScreen} currentScreen={screen} user={user} onLogout={handleLogout} onLogin={() => setAuthMode('login')} />
+      <Navbar 
+        onNavigate={setScreen} 
+        currentScreen={screen} 
+        user={user} 
+        onLogout={handleLogout} 
+        onLogin={() => setAuthMode('login')} 
+        onOpenModal={setModalType}
+      />
       
       <main className="flex-grow">
         <AnimatePresence mode="wait">
           {screen === 'landing' && (
-            <LandingPage key="landing" onStart={handleStartWizard} />
+            <LandingPage key="landing" onStart={handleStartWizard} onOpenModal={setModalType} />
           )}
           {screen === 'wizard' && (
             <WizardPage 
@@ -99,12 +123,14 @@ export default function App() {
               analysis={analysis} 
               onReanalyze={() => setScreen('wizard')}
               roomImage={formData.image}
+              onOpenAIExpert={() => setModalType('ai-expert')}
+              onShowToast={showToast}
             />
           )}
         </AnimatePresence>
       </main>
 
-      <Footer />
+      <Footer onOpenModal={setModalType} />
 
       {/* Auth Modals */}
       <AnimatePresence>
@@ -119,6 +145,28 @@ export default function App() {
             }}
             setMode={setAuthMode}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Global Modals */}
+      <AnimatePresence>
+        {modalType !== 'none' && (
+          <GlobalModal type={modalType} onClose={() => setModalType('none')} />
+        )}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl font-bold flex items-center gap-2"
+          >
+            <Sparkles className="text-primary size-5" />
+            {toast}
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -140,12 +188,13 @@ export default function App() {
   );
 }
 
-function Navbar({ onNavigate, currentScreen, user, onLogout, onLogin }: { 
+function Navbar({ onNavigate, currentScreen, user, onLogout, onLogin, onOpenModal }: { 
   onNavigate: (s: Screen) => void, 
   currentScreen: Screen,
   user: any,
   onLogout: () => void,
-  onLogin: () => void
+  onLogin: () => void,
+  onOpenModal: (t: ModalType) => void
 }) {
   return (
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200">
@@ -160,10 +209,10 @@ function Navbar({ onNavigate, currentScreen, user, onLogout, onLogin }: {
         </div>
 
         <nav className="hidden md:flex items-center gap-10">
-          <a href="#" className="text-sm font-semibold hover:text-primary transition-colors">How it Works</a>
-          <a href="#" className="text-sm font-semibold hover:text-primary transition-colors">Products</a>
-          <a href="#" className="text-sm font-semibold hover:text-primary transition-colors">Pricing</a>
-          <a href="#" className="text-sm font-semibold hover:text-primary transition-colors">Reviews</a>
+          <button onClick={() => onOpenModal('how-it-works')} className="text-sm font-semibold hover:text-primary transition-colors">How it Works</button>
+          <button onClick={() => onOpenModal('products')} className="text-sm font-semibold hover:text-primary transition-colors">Products</button>
+          <button onClick={() => onOpenModal('pricing')} className="text-sm font-semibold hover:text-primary transition-colors">Pricing</button>
+          <button onClick={() => onOpenModal('reviews')} className="text-sm font-semibold hover:text-primary transition-colors">Reviews</button>
         </nav>
 
         <div className="flex items-center gap-4">
@@ -194,7 +243,7 @@ function Navbar({ onNavigate, currentScreen, user, onLogout, onLogin }: {
   );
 }
 
-const LandingPage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
+const LandingPage: React.FC<{ onStart: () => void, onOpenModal: (t: ModalType) => void }> = ({ onStart, onOpenModal }) => {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -227,7 +276,10 @@ const LandingPage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
                 Design My Space
                 <ArrowRight className="group-hover:translate-x-1 transition-transform" />
               </button>
-              <button className="bg-white border border-slate-200 hover:border-primary text-slate-900 px-8 py-4 rounded-xl text-lg font-bold transition-all flex items-center justify-center gap-2">
+              <button 
+                onClick={() => onOpenModal('gallery')}
+                className="bg-white border border-slate-200 hover:border-primary text-slate-900 px-8 py-4 rounded-xl text-lg font-bold transition-all flex items-center justify-center gap-2"
+              >
                 View Gallery
               </button>
             </div>
@@ -557,8 +609,10 @@ function CategoryButton({ icon, label, selected, onClick }: { icon: React.ReactN
 const RecommendationsPage: React.FC<{ 
   analysis: RoomAnalysis, 
   onReanalyze: () => void, 
-  roomImage: string | null
-}> = ({ analysis, onReanalyze, roomImage }) => {
+  roomImage: string | null,
+  onOpenAIExpert: () => void,
+  onShowToast: (msg: string) => void
+}> = ({ analysis, onReanalyze, roomImage, onOpenAIExpert, onShowToast }) => {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -626,12 +680,15 @@ const RecommendationsPage: React.FC<{
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
         {analysis.recommendations?.map((rec, idx) => (
-          <RecommendationCard key={idx} rec={rec} />
+          <RecommendationCard key={idx} rec={rec} onShowToast={onShowToast} onOpenAIExpert={onOpenAIExpert} />
         ))}
       </div>
 
       <div className="fixed bottom-8 right-8 z-50">
-        <button className="flex items-center gap-3 bg-slate-900 text-white px-6 py-4 rounded-full shadow-2xl hover:scale-105 transition-transform">
+        <button 
+          onClick={onOpenAIExpert}
+          className="flex items-center gap-3 bg-slate-900 text-white px-6 py-4 rounded-full shadow-2xl hover:scale-105 transition-transform"
+        >
           <MessageSquare className="size-6" />
           <span className="font-bold">Contact Expert AI</span>
         </button>
@@ -649,7 +706,7 @@ function SummaryItem({ label, value }: { label: string, value: string }) {
   );
 }
 
-const RecommendationCard: React.FC<{ rec: any }> = ({ rec }) => {
+const RecommendationCard: React.FC<{ rec: any, onShowToast: (msg: string) => void, onOpenAIExpert: () => void }> = ({ rec, onShowToast, onOpenAIExpert }) => {
   return (
     <div className="flex flex-col bg-white rounded-xl overflow-hidden shadow-md border border-slate-100 hover:shadow-xl transition-shadow">
       <div className="relative h-64 overflow-hidden bg-slate-50 flex items-center justify-center p-8">
@@ -659,7 +716,7 @@ const RecommendationCard: React.FC<{ rec: any }> = ({ rec }) => {
         <img 
           src={rec.imageUrl} 
           alt={rec.model} 
-          className="w-full h-full object-contain"
+          className="w-full h-full object-contain hover:scale-110 transition-transform duration-500"
           referrerPolicy="no-referrer"
         />
       </div>
@@ -689,8 +746,16 @@ const RecommendationCard: React.FC<{ rec: any }> = ({ rec }) => {
           <span className="text-2xl font-black text-slate-900">{rec.price}</span>
         </div>
         <div className="flex gap-2 mt-2">
-          <button className="flex-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors">Buy Now</button>
-          <button className="px-4 bg-slate-900 text-white rounded-xl hover:bg-black transition-colors">
+          <button 
+            onClick={() => onShowToast(`Added ${rec.model} to cart!`)}
+            className="flex-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            Buy Now
+          </button>
+          <button 
+            onClick={onOpenAIExpert}
+            className="px-4 bg-slate-900 text-white rounded-xl hover:bg-black transition-colors"
+          >
             <MessageSquare className="size-5" />
           </button>
         </div>
@@ -824,23 +889,281 @@ function AuthModal({ mode, onClose, onSuccess, setMode }: {
   );
 }
 
-function Footer() {
+function Footer({ onOpenModal }: { onOpenModal: (t: ModalType) => void }) {
   return (
-    <footer className="bg-white py-12 border-t border-slate-200">
-      <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
-        <div className="flex items-center gap-2">
-          <div className="bg-slate-900 p-1.5 rounded-lg flex items-center justify-center">
-            <Memory className="text-white size-5" />
+    <footer className="bg-slate-900 text-slate-400 py-20 px-6 border-t border-slate-800">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary p-1 rounded flex items-center justify-center">
+              <Memory className="text-white size-5" />
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-white">
+              ElectroSpace <span className="text-primary">AI</span>
+            </h2>
           </div>
-          <span className="text-lg font-bold text-slate-900">ElectroSpace AI</span>
+          <p className="text-sm leading-relaxed">
+            The world's first AI-powered smart electronics recommendation engine. Designed for modern living.
+          </p>
+          <div className="flex gap-4">
+            <div className="size-8 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+              <Twitter className="size-4" />
+            </div>
+            <div className="size-8 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+              <Instagram className="size-4" />
+            </div>
+            <div className="size-8 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+              <Facebook className="size-4" />
+            </div>
+          </div>
         </div>
-        <p className="text-slate-500 text-sm">© 2024 ElectroSpace AI. All rights reserved. Designed for the future of living.</p>
-        <div className="flex items-center gap-6">
-          <a href="#" className="text-slate-400 hover:text-primary transition-colors">Privacy Policy</a>
-          <a href="#" className="text-slate-400 hover:text-primary transition-colors">Terms of Service</a>
-          <a href="#" className="text-slate-400 hover:text-primary transition-colors">Help Center</a>
+        
+        <div>
+          <h4 className="text-white font-bold mb-6">Product</h4>
+          <ul className="space-y-4 text-sm">
+            <li><button onClick={() => onOpenModal('how-it-works')} className="hover:text-primary transition-colors text-left">How it Works</button></li>
+            <li><button onClick={() => onOpenModal('products')} className="hover:text-primary transition-colors text-left">Features</button></li>
+            <li><button onClick={() => onOpenModal('pricing')} className="hover:text-primary transition-colors text-left">Pricing</button></li>
+            <li><button onClick={() => onOpenModal('reviews')} className="hover:text-primary transition-colors text-left">Testimonials</button></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-white font-bold mb-6">Company</h4>
+          <ul className="space-y-4 text-sm">
+            <li><a href="#" className="hover:text-primary transition-colors">About Us</a></li>
+            <li><a href="#" className="hover:text-primary transition-colors">Careers</a></li>
+            <li><a href="#" className="hover:text-primary transition-colors">Privacy Policy</a></li>
+            <li><a href="#" className="hover:text-primary transition-colors">Terms of Service</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-white font-bold mb-6">Newsletter</h4>
+          <p className="text-sm mb-4">Get the latest smart home trends delivered to your inbox.</p>
+          <div className="flex gap-2">
+            <input 
+              type="email" 
+              placeholder="Email address" 
+              className="bg-slate-800 border-none rounded-lg px-4 py-2 text-sm w-full focus:ring-2 focus:ring-primary outline-none"
+            />
+            <button className="bg-primary text-white p-2 rounded-lg hover:bg-blue-700 transition-colors">
+              <ArrowRight className="size-5" />
+            </button>
+          </div>
         </div>
       </div>
+      <div className="max-w-7xl mx-auto mt-20 pt-8 border-t border-slate-800 text-center text-xs">
+        <p>&copy; 2026 ElectroSpace AI. All rights reserved.</p>
+      </div>
     </footer>
+  );
+}
+
+function GlobalModal({ type, onClose }: { 
+  type: ModalType, 
+  onClose: () => void
+}) {
+  const renderContent = () => {
+    switch (type) {
+      case 'how-it-works':
+        return (
+          <div className="p-8 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900">How ElectroSpace Works</h2>
+            <div className="space-y-4">
+              <div className="flex gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 font-bold">1</div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Visual Scanning</h4>
+                  <p className="text-sm text-slate-500">Our AI uses computer vision to identify furniture, wall colors, and ambient light levels from your photos.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 font-bold">2</div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Neural Matching</h4>
+                  <p className="text-sm text-slate-500">We compare your room profile against a database of 50,000+ premium electronics using a custom-trained LLM.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 font-bold">3</div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Spatial Layout</h4>
+                  <p className="text-sm text-slate-500">The AI calculates optimal placement for speakers, TVs, and smart lighting to maximize performance and style.</p>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-primary transition-colors">Got it!</button>
+          </div>
+        );
+      case 'products':
+        return (
+          <div className="p-8 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900">Our Product Categories</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {['Smart TVs', 'Audio Systems', 'Smart Lighting', 'Home Security', 'Climate Control', 'Kitchen Tech'].map(cat => (
+                <div key={cat} className="p-4 rounded-xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group">
+                  <h4 className="font-bold text-slate-900 group-hover:text-primary">{cat}</h4>
+                  <p className="text-xs text-slate-500">Curated premium selection</p>
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-primary transition-colors">Explore All</button>
+          </div>
+        );
+      case 'pricing':
+        return (
+          <div className="p-8 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900 text-center">Simple Pricing</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 rounded-2xl border-2 border-slate-100 space-y-4">
+                <h4 className="font-bold text-slate-900">Basic Scan</h4>
+                <div className="text-3xl font-black text-slate-900">$0 <span className="text-sm font-normal text-slate-400">/ scan</span></div>
+                <ul className="text-sm space-y-2 text-slate-500">
+                  <li>• 3 Product Recommendations</li>
+                  <li>• Basic Style Analysis</li>
+                  <li>• Standard Support</li>
+                </ul>
+                <button className="w-full py-2 border border-slate-200 rounded-lg font-bold hover:bg-slate-50">Current Plan</button>
+              </div>
+              <div className="p-6 rounded-2xl border-2 border-primary bg-primary/5 space-y-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-widest">Popular</div>
+                <h4 className="font-bold text-slate-900">Pro Designer</h4>
+                <div className="text-3xl font-black text-slate-900">$19 <span className="text-sm font-normal text-slate-400">/ month</span></div>
+                <ul className="text-sm space-y-2 text-slate-500">
+                  <li>• Unlimited Room Scans</li>
+                  <li>• 24/7 AI Expert Chat</li>
+                  <li>• Exclusive Discounts</li>
+                  <li>• 3D Room Visualizer</li>
+                </ul>
+                <button className="w-full py-2 bg-primary text-white rounded-lg font-bold hover:bg-blue-700">Upgrade Now</button>
+              </div>
+            </div>
+          </div>
+        );
+      case 'reviews':
+        return (
+          <div className="p-8 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900">What People Say</h2>
+            <div className="space-y-4">
+              {[
+                { name: "Sarah J.", text: "The AI matched my living room perfectly. I bought the recommended soundbar and it looks like it was made for my shelf!", rating: 5 },
+                { name: "Mark T.", text: "Saved me hours of research. The budget filter is actually accurate.", rating: 5 },
+                { name: "Elena R.", text: "Incredible tech. The lighting analysis detected my north-facing windows and suggested the perfect smart bulbs.", rating: 5 }
+              ].map((rev, i) => (
+                <div key={i} className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="flex text-amber-400">
+                    {[...Array(rev.rating)].map((_, j) => <Star key={j} className="size-3 fill-current" />)}
+                  </div>
+                  <p className="text-sm text-slate-600 italic">"{rev.text}"</p>
+                  <p className="text-xs font-bold text-slate-900">— {rev.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'gallery':
+        return (
+          <div className="p-8 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900">Design Gallery</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="aspect-square rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <img 
+                    src={`https://picsum.photos/seed/gallery${i}/400/400`} 
+                    alt="Gallery" 
+                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-primary transition-colors">Close Gallery</button>
+          </div>
+        );
+      case 'ai-expert':
+        return (
+          <div className="flex flex-col h-[600px]">
+            <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+              <div className="size-10 rounded-full bg-primary flex items-center justify-center">
+                <Cpu className="text-white size-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">ElectroSpace Expert AI</h3>
+                <p className="text-xs text-green-500 font-bold flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                  Online & Ready to Help
+                </p>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
+              <div className="flex gap-3 max-w-[80%]">
+                <div className="size-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                  <Cpu className="text-slate-500 size-4" />
+                </div>
+                <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 text-sm text-slate-700">
+                  Hello! I'm your ElectroSpace Expert. I've reviewed your room analysis. How can I help you refine your tech setup today?
+                </div>
+              </div>
+              <div className="flex gap-3 max-w-[80%] ml-auto flex-row-reverse">
+                <div className="size-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+                  <UserCircle className="text-white size-5" />
+                </div>
+                <div className="bg-primary text-white p-3 rounded-2xl rounded-tr-none shadow-sm text-sm">
+                  I'm worried about the soundbar fitting on my mantle.
+                </div>
+              </div>
+              <div className="flex gap-3 max-w-[80%]">
+                <div className="size-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                  <Cpu className="text-slate-500 size-4" />
+                </div>
+                <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 text-sm text-slate-700">
+                  Based on your scan, your mantle is 48 inches wide. The recommended Sonos Beam is only 25.6 inches wide, leaving plenty of room for decor! Would you like me to check the depth as well?
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-white">
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Ask me anything about your space..." 
+                  className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary outline-none"
+                />
+                <button className="bg-primary text-white p-3 rounded-xl hover:bg-blue-700 transition-colors">
+                  <ArrowRight className="size-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden"
+      >
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 z-10 size-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
+        >
+          <X className="size-5 text-slate-500" />
+        </button>
+        {renderContent()}
+      </motion.div>
+    </div>
   );
 }
