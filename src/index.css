@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #1152d4;
+  --color-background-light: #f6f6f8;
+  --color-background-dark: #101622;
+  --color-navy-custom: #0d121b;
+}
+
+@layer base {
+  body {
+    @apply bg-background-light text-slate-900 font-sans antialiased;
+  }
+}
+
+@keyframes ping-slow {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

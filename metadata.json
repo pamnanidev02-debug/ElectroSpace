@@ -1,0 +1,7 @@
+{
+  "name": "ElectroSpace AI",
+  "description": "AI-powered smart electronics recommendation engine that analyzes your room to find the perfect tech fit.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
