@@ -31,6 +31,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeRoom, RoomAnalysis } from './services/gemini';
+import { auth, db, loginWithGoogle, logout as firebaseLogout, handleFirestoreError, OperationType } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 type Screen = 'landing' | 'wizard' | 'recommendations';
 type ModalType = 'none' | 'how-it-works' | 'products' | 'pricing' | 'reviews' | 'gallery' | 'ai-expert';
@@ -51,12 +54,19 @@ export default function App() {
   });
 
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.user) setUser(data.user);
-      })
-      .catch(() => {});
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser({
+          uid: user.uid,
+          email: user.email,
+          name: user.displayName,
+          photoURL: user.photoURL
+        });
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -78,15 +88,38 @@ export default function App() {
   
   const handleAnalyze = async () => {
     setLoading(true);
-    const result = await analyzeRoom(formData);
-    setAnalysis(result);
-    setLoading(false);
-    setScreen('recommendations');
+    try {
+      const result = await analyzeRoom(formData);
+      setAnalysis(result);
+      
+      // Save scan to Firestore if user is logged in
+      if (user) {
+        try {
+          await addDoc(collection(db, 'scans'), {
+            uid: user.uid,
+            category: formData.category,
+            roomSize: formData.roomSize,
+            budget: formData.budget,
+            image: formData.image,
+            analysis: result,
+            createdAt: serverTimestamp()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, 'scans');
+        }
+      }
+      
+      setScreen('recommendations');
+    } catch (err) {
+      console.error("Analysis failed:", err);
+      showToast("Analysis failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setUser(null);
+    await firebaseLogout();
     setScreen('landing');
   };
 
@@ -136,14 +169,12 @@ export default function App() {
       <AnimatePresence>
         {authMode && (
           <AuthModal 
-            mode={authMode} 
             onClose={() => setAuthMode(null)} 
             onSuccess={(u) => {
               setUser(u);
               setAuthMode(null);
               setScreen('wizard');
             }}
-            setMode={setAuthMode}
           />
         )}
       </AnimatePresence>
@@ -764,41 +795,23 @@ const RecommendationCard: React.FC<{ rec: any, onShowToast: (msg: string) => voi
   );
 }
 
-function AuthModal({ mode, onClose, onSuccess, setMode }: { 
-  mode: 'login' | 'signup', 
+function AuthModal({ onClose, onSuccess }: { 
   onClose: () => void, 
-  onSuccess: (user: any) => void,
-  setMode: (m: 'login' | 'signup') => void
+  onSuccess: (user: any) => void
 }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
+    setLoading(true);
     setError('');
-    const url = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
-    const body = mode === 'login' ? { email, password } : { email, password, name };
-    
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        if (mode === 'login') {
-          onSuccess(data.user);
-        } else {
-          setMode('login');
-        }
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError('Something went wrong');
+      const user = await loginWithGoogle();
+      onSuccess(user);
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in with Google');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -819,70 +832,49 @@ function AuthModal({ mode, onClose, onSuccess, setMode }: {
       >
         <div className="p-8">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">{mode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+            <h2 className="text-2xl font-bold text-slate-900">Sign In</h2>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-              <MoreHorizontal />
+              <X className="size-6" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  required
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                  placeholder="John Doe"
-                />
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="bg-primary/10 size-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Memory className="text-primary size-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Welcome to ElectroSpace AI</h3>
+              <p className="text-slate-500 text-sm">Sign in to save your room scans and get personalized recommendations.</p>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium">
+                {error}
               </div>
             )}
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Email Address</label>
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                placeholder="john@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
-              <input 
-                type="password" 
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                placeholder="••••••••"
-              />
-            </div>
-
-            {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
 
             <button 
-              type="submit"
-              className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all mt-4"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 font-bold py-4 rounded-xl shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50"
             >
-              {mode === 'login' ? 'Sign In' : 'Sign Up'}
+              {loading ? (
+                <div className="size-5 border-2 border-slate-300 border-t-primary rounded-full animate-spin"></div>
+              ) : (
+                <svg className="size-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+              )}
+              Continue with Google
             </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <p className="text-slate-500 text-sm">
-              {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
-              <button 
-                onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                className="ml-2 text-primary font-bold hover:underline"
-              >
-                {mode === 'login' ? 'Sign Up' : 'Sign In'}
-              </button>
-            </p>
           </div>
+
+          <p className="mt-8 text-center text-xs text-slate-400">
+            By continuing, you agree to our Terms of Service and Privacy Policy.
+          </p>
         </div>
       </motion.div>
     </div>
