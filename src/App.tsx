@@ -549,16 +549,19 @@ const LandingPage: React.FC<{ onStart: () => void, onOpenModal: (t: ModalType) =
               icon={<Upload className="size-8" />} 
               title="1. Upload" 
               desc="Take a few photos of your room. Our AI detects dimensions, furniture placement, and existing aesthetic themes."
+              onClick={onStart}
             />
             <StepCard 
               icon={<Cpu className="size-8" />} 
               title="2. Analyze" 
               desc="We cross-reference thousands of high-end electronics with your room's specific acoustics, lighting, and size constraints."
+              onClick={onStart}
             />
             <StepCard 
               icon={<Sparkles className="size-8" />} 
               title="3. Recommend" 
               desc="Receive a curated, interactive lookbook of premium products guaranteed to look and sound incredible in your space."
+              onClick={onStart}
             />
           </div>
         </div>
@@ -594,9 +597,12 @@ const LandingPage: React.FC<{ onStart: () => void, onOpenModal: (t: ModalType) =
   );
 }
 
-function StepCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
+function StepCard({ icon, title, desc, onClick }: { icon: React.ReactNode, title: string, desc: string, onClick?: () => void }) {
   return (
-    <div className="group p-8 rounded-3xl bg-background-light border border-transparent hover:border-primary/20 transition-all hover:shadow-xl">
+    <div 
+      onClick={onClick}
+      className={`group p-8 rounded-3xl bg-background-light border border-transparent hover:border-primary/20 transition-all hover:shadow-xl ${onClick ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+    >
       <div className="size-16 rounded-2xl bg-white shadow-sm flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-white transition-colors">
         {icon}
       </div>
@@ -786,10 +792,16 @@ const WizardPage: React.FC<{
                 Back
               </button>
               <button 
-                onClick={onNext}
+                onClick={() => {
+                  if (!formData.image) {
+                    alert("Please upload a room photo first to allow AI analysis.");
+                    return;
+                  }
+                  onNext();
+                }}
                 className="flex items-center gap-2 px-10 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
               >
-                Continue to Recommendations
+                Analyze & Recommend
                 <ArrowRight className="size-5" />
               </button>
             </div>
@@ -1034,7 +1046,10 @@ function Footer({ onOpenModal }: { onOpenModal: (t: ModalType) => void }) {
               placeholder="Email address" 
               className="bg-slate-800 border-none rounded-lg px-4 py-2 text-sm w-full focus:ring-2 focus:ring-primary outline-none"
             />
-            <button className="bg-primary text-white p-2 rounded-lg hover:bg-blue-700 transition-colors">
+            <button 
+              onClick={() => alert("Thanks for subscribing! You'll receive our next newsletter soon.")}
+              className="bg-primary text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
               <ArrowRight className="size-5" />
             </button>
           </div>
@@ -1123,7 +1138,12 @@ function GlobalModal({ type, onClose }: {
                   <li>• Exclusive Discounts</li>
                   <li>• 3D Room Visualizer</li>
                 </ul>
-                <button className="w-full py-2 bg-primary text-white rounded-lg font-bold hover:bg-blue-700">Upgrade Now</button>
+                <button 
+                  onClick={() => alert("Pro Designer plan selected! Redirecting to checkout...")}
+                  className="w-full py-2 bg-primary text-white rounded-lg font-bold hover:bg-blue-700"
+                >
+                  Upgrade Now
+                </button>
               </div>
             </div>
           </div>
@@ -1210,16 +1230,26 @@ function GlobalModal({ type, onClose }: {
               </div>
             </div>
             <div className="p-4 border-t border-slate-100 bg-white">
-              <div className="flex gap-2">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const input = (e.target as any).elements[0];
+                  if (input.value.trim()) {
+                    alert(`AI Expert: "That's a great question about '${input.value}'. I'm analyzing the technical specifications for you right now!"`);
+                    input.value = '';
+                  }
+                }}
+                className="flex gap-2"
+              >
                 <input 
                   type="text" 
                   placeholder="Ask me anything about your space..." 
                   className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary outline-none"
                 />
-                <button className="bg-primary text-white p-3 rounded-xl hover:bg-blue-700 transition-colors">
+                <button type="submit" className="bg-primary text-white p-3 rounded-xl hover:bg-blue-700 transition-colors">
                   <ArrowRight className="size-5" />
                 </button>
-              </div>
+              </form>
             </div>
           </div>
         );
