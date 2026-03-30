@@ -1,5 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  User,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, onSnapshot, getDocFromServer, Timestamp, serverTimestamp } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -110,3 +120,43 @@ export const loginWithGoogle = async () => {
 };
 
 export const logout = () => signOut(auth);
+
+export const signUpWithEmail = async (email: string, password: string, name: string) => {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const user = result.user;
+    
+    // Update profile with name
+    await updateProfile(user, { displayName: name });
+    
+    // Create user document in Firestore
+    const userRef = doc(db, 'users', user.uid);
+    try {
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        name: name,
+        photoURL: null,
+        role: 'user',
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
+    }
+    
+    return user;
+  } catch (error) {
+    console.error("Signup failed:", error);
+    throw error;
+  }
+};
+
+export const loginWithEmail = async (email: string, password: string) => {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (error) {
+    console.error("Login failed:", error);
+    throw error;
+  }
+};

@@ -31,7 +31,16 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeRoom, RoomAnalysis } from './services/gemini';
-import { auth, db, loginWithGoogle, logout as firebaseLogout, handleFirestoreError, OperationType } from './firebase';
+import { 
+  auth, 
+  db, 
+  loginWithGoogle, 
+  logout as firebaseLogout, 
+  handleFirestoreError, 
+  OperationType,
+  signUpWithEmail,
+  loginWithEmail
+} from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -41,11 +50,19 @@ type ModalType = 'none' | 'how-it-works' | 'products' | 'pricing' | 'reviews' | 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('landing');
   const [loading, setLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [analysis, setAnalysis] = useState<RoomAnalysis | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
   const [modalType, setModalType] = useState<ModalType>('none');
   const [toast, setToast] = useState<string | null>(null);
+  const [authView, setAuthView] = useState<'gateway' | 'login' | 'signup'>('gateway');
+  const [authForm, setAuthForm] = useState({
+    email: '',
+    password: '',
+    name: ''
+  });
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     category: 'Air Conditioner',
     roomSize: '250 - 350 sq ft',
@@ -65,6 +82,7 @@ export default function App() {
       } else {
         setUser(null);
       }
+      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -77,11 +95,7 @@ export default function App() {
   }, [toast]);
 
   const handleStartWizard = () => {
-    if (!user) {
-      setAuthMode('login');
-    } else {
-      setScreen('wizard');
-    }
+    setScreen('wizard');
   };
 
   const handleBackToLanding = () => setScreen('landing');
@@ -125,6 +139,187 @@ export default function App() {
 
   const showToast = (msg: string) => setToast(msg);
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="size-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          <p className="text-slate-400 font-bold animate-pulse">Initializing ElectroSpace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    const handleEmailAuth = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setAuthSubmitting(true);
+      setAuthError(null);
+      try {
+        if (authView === 'signup') {
+          if (!authForm.name) throw new Error('Name is required');
+          await signUpWithEmail(authForm.email, authForm.password, authForm.name);
+        } else {
+          await loginWithEmail(authForm.email, authForm.password);
+        }
+      } catch (err: any) {
+        setAuthError(err.message || 'Authentication failed');
+      } finally {
+        setAuthSubmitting(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Background Accents */}
+        <div className="absolute top-[-10%] left-[-10%] size-[40%] bg-primary/20 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] size-[40%] bg-blue-600/10 rounded-full blur-[120px]"></div>
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+        >
+          <div className="p-10">
+            <div className="flex flex-col items-center text-center mb-10">
+              <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-primary/30 mb-6">
+                <Memory className="text-white size-10" />
+              </div>
+              <h1 className="text-3xl font-black text-slate-900 mb-3">ElectroSpace AI</h1>
+              <p className="text-slate-500 leading-relaxed">
+                {authView === 'gateway' && "Unlock personalized smart home recommendations powered by advanced spatial AI."}
+                {authView === 'login' && "Welcome back! Sign in to access your saved room scans."}
+                {authView === 'signup' && "Create your account to start designing your perfect smart home."}
+              </p>
+            </div>
+
+            {authError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium flex items-center gap-2">
+                <Info className="size-4 shrink-0" />
+                {authError}
+              </div>
+            )}
+
+            <AnimatePresence mode="wait">
+              {authView === 'gateway' ? (
+                <motion.div 
+                  key="gateway"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="space-y-4"
+                >
+                  <button 
+                    onClick={loginWithGoogle}
+                    className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-100 text-slate-700 font-bold py-4 rounded-2xl shadow-sm hover:border-primary hover:bg-slate-50 transition-all group"
+                  >
+                    <svg className="size-6 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Continue with Google
+                  </button>
+
+                  <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-400 font-bold tracking-widest">Or</span></div>
+                  </div>
+
+                  <button 
+                    onClick={() => setAuthView('signup')}
+                    className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-primary transition-all active:scale-[0.98]"
+                  >
+                    Create New Account
+                  </button>
+                  
+                  <p className="text-center text-sm text-slate-500">
+                    Already have an account? <button onClick={() => setAuthView('login')} className="text-primary font-bold hover:underline">Sign In</button>
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.form 
+                  key="form"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  onSubmit={handleEmailAuth}
+                  className="space-y-4"
+                >
+                  {authView === 'signup' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="John Doe"
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 focus:border-primary focus:bg-white outline-none transition-all font-medium"
+                        value={authForm.name}
+                        onChange={(e) => setAuthForm({...authForm, name: e.target.value})}
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                    <input 
+                      type="email" 
+                      required
+                      placeholder="name@example.com"
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 focus:border-primary focus:bg-white outline-none transition-all font-medium"
+                      value={authForm.email}
+                      onChange={(e) => setAuthForm({...authForm, email: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>
+                    <input 
+                      type="password" 
+                      required
+                      placeholder="••••••••"
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 focus:border-primary focus:bg-white outline-none transition-all font-medium"
+                      value={authForm.password}
+                      onChange={(e) => setAuthForm({...authForm, password: e.target.value})}
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    disabled={authSubmitting}
+                    className="w-full bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {authSubmitting ? (
+                      <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                      authView === 'signup' ? 'Create Account' : 'Sign In'
+                    )}
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setAuthView('gateway');
+                      setAuthError(null);
+                    }}
+                    className="w-full text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors"
+                  >
+                    Back to Options
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            <div className="mt-10 pt-8 border-t border-slate-50 text-center">
+              <p className="text-xs text-slate-400 leading-relaxed">
+                By joining, you agree to our <span className="text-slate-600 font-bold cursor-pointer hover:underline">Terms of Service</span> and <span className="text-slate-600 font-bold cursor-pointer hover:underline">Privacy Policy</span>.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar 
@@ -132,7 +327,7 @@ export default function App() {
         currentScreen={screen} 
         user={user} 
         onLogout={handleLogout} 
-        onLogin={() => setAuthMode('login')} 
+        onLogin={() => {}} 
         onOpenModal={setModalType}
       />
       
@@ -164,20 +359,6 @@ export default function App() {
       </main>
 
       <Footer onOpenModal={setModalType} />
-
-      {/* Auth Modals */}
-      <AnimatePresence>
-        {authMode && (
-          <AuthModal 
-            onClose={() => setAuthMode(null)} 
-            onSuccess={(u) => {
-              setUser(u);
-              setAuthMode(null);
-              setScreen('wizard');
-            }}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Global Modals */}
       <AnimatePresence>
@@ -791,92 +972,6 @@ const RecommendationCard: React.FC<{ rec: any, onShowToast: (msg: string) => voi
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function AuthModal({ onClose, onSuccess }: { 
-  onClose: () => void, 
-  onSuccess: (user: any) => void
-}) {
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const user = await loginWithGoogle();
-      onSuccess(user);
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-      />
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
-      >
-        <div className="p-8">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">Sign In</h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-              <X className="size-6" />
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <div className="bg-primary/10 size-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Memory className="text-primary size-8" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Welcome to ElectroSpace AI</h3>
-              <p className="text-slate-500 text-sm">Sign in to save your room scans and get personalized recommendations.</p>
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium">
-                {error}
-              </div>
-            )}
-
-            <button 
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 font-bold py-4 rounded-xl shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="size-5 border-2 border-slate-300 border-t-primary rounded-full animate-spin"></div>
-              ) : (
-                <svg className="size-5" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-              )}
-              Continue with Google
-            </button>
-          </div>
-
-          <p className="mt-8 text-center text-xs text-slate-400">
-            By continuing, you agree to our Terms of Service and Privacy Policy.
-          </p>
-        </div>
-      </motion.div>
     </div>
   );
 }
