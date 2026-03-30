@@ -630,7 +630,7 @@ function CategoryButton({ icon, label, selected, onClick }: { icon: React.ReactN
       }`}
     >
       <div className={selected ? 'text-primary' : 'text-slate-500'}>
-        {React.cloneElement(icon as React.ReactElement, { size: 32 })}
+        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 32 }) : icon}
       </div>
       <span className={`text-sm ${selected ? 'font-bold' : 'font-medium text-slate-700'}`}>{label}</span>
     </button>
